@@ -1,0 +1,18 @@
+# Makefile для сборки консольного приложения asciiart
+
+TARGET = console
+SOURCES = console.cpp
+
+CXX = g++
+CXXFLAGS = -std=c++17 -O2 -Wall `pkg-config --cflags opencv4`
+LDFLAGS = `pkg-config --libs opencv4 | sed 's/-lopencv_viz//g'`
+
+all: $(TARGET)
+
+$(TARGET): $(SOURCES)
+	$(CXX) $(CXXFLAGS) $(SOURCES) -o $(TARGET) $(LDFLAGS)
+
+clean:
+	rm -f $(TARGET)
+
+.PHONY: all clean
