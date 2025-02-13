@@ -18,8 +18,8 @@ string convertMatToAscii(const Mat &img, int desiredWidth, const string &asciiCh
     // Коэффициент 0.55 корректирует соотношение сторон символа в консоли
     int newHeight = static_cast<int>(desiredWidth * aspect * 0.55);
     if(newHeight < 1) newHeight = 1;
-
-    Mat resized;
+	 
+	Mat resized;
     resize(img, resized, Size(desiredWidth, newHeight));
 
     ostringstream oss;
@@ -29,7 +29,9 @@ string convertMatToAscii(const Mat &img, int desiredWidth, const string &asciiCh
             int b = color[0], g = color[1], r = color[2];
             // Преобразование в оттенок серого по формуле яркости
             double gray = 0.299 * r + 0.587 * g + 0.114 * b;
-            int index = static_cast<int>(gray / 255 * (asciiChars.size() - 1));
+			//double gamma = 3.8;
+			//double corrected = pow(gray/255.0, gamma) * 255.0;
+            int index = static_cast<int>(gray/ 255 * (asciiChars.size() - 1));
             char ch = asciiChars[index];
             // Вывод символа с 24-битной раскраской (ANSI escape sequence)
             oss << "\033[38;2;" << r << ";" << g << ";" << b << "m" << ch << "\033[0m";
@@ -56,8 +58,15 @@ int main(int argc, char** argv) {
     string inputFile = argv[1];
     int desiredWidth = (argc >= 3) ? atoi(argv[2]) : 80;
     // Набор символов: от «тёмных» (более плотных) к «светлым» (менее плотным)
-    string asciiChars = "@%#*+=-:. ";
-
+    string asciiChars = " .'`^\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$";
+//	string asciiChars = " .'`^\",:;Il!i><~+_-?][}{1)(|\\/*#MW&8%B@$";
+//	string asciiChars = "@%#*+=-:. ";
+//	string asciiChars = "$@B%8&WM#*oahkbdpqwmZO0QLCJUYXzcvunxrjft/|()1{}[]?-_+~<>i!lI;:,\"^`'. ";
+//	string asciiChars = "@%#*+=-:;',`. ";
+//	string asciiChars = " .'`^\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$";
+//	string asciiChars = " .:-=+*#%@";
+//	string asciiChars = "@%#*oO+=-:. ";
+//string asciiChars = "$@B%8&WM#*oahkbdpqwmZO0QLCJUYXzcvunxrjft/|()1{}[]?-_+~<>i!lI;:,\"^`'. ";
     // Определяем расширение файла
     string fileExtension = "";
     size_t dotPos = inputFile.find_last_of('.');
@@ -86,37 +95,58 @@ int main(int argc, char** argv) {
         }
     }
 
-    if (isVideo) {
-        // Обработка видео или GIF
-        VideoCapture cap(inputFile);
-        if (!cap.isOpened()) {
-            cerr << "Ошибка: не удалось открыть файл " << inputFile << endl;
-            return 1;
-        }
-        double fps = cap.get(CAP_PROP_FPS);
-        if (fps <= 0) fps = 10; // если FPS не удалось получить, используем 10
+	if (isVideo) {
+		// Обработка видео или GIF
+		if (fileExtension == "gif") {
+			// Зацикливаем воспроизведение GIF
+			while (true) {
+				VideoCapture cap(inputFile);
+				if (!cap.isOpened()) {
+					cerr << "Ошибка: не удалось открыть файл " << inputFile << endl;
+					return 1;
+				}
+				double fps = cap.get(CAP_PROP_FPS);
+				if (fps <= 0) fps = 10;
 
-        Mat frame;
-        while (cap.read(frame)) {
-            if (frame.empty()) break;
-            // Преобразуем кадр в ASCII-арт строку
-            string asciiFrame = convertMatToAscii(frame, desiredWidth, asciiChars);
-            clearConsole();
-            cout << asciiFrame << flush;
-            // Задержка для сохранения оригинальной частоты кадров
-            this_thread::sleep_for(chrono::milliseconds(static_cast<int>(1000.0 / fps)));
-        }
-        cap.release();
-    } else {
-        // Обработка статичного изображения
-        Mat img = imread(inputFile, IMREAD_COLOR);
-        if (img.empty()) {
-            cerr << "Ошибка: не удалось загрузить изображение " << inputFile << endl;
-            return 1;
-        }
-        string asciiImage = convertMatToAscii(img, desiredWidth, asciiChars);
-        cout << asciiImage;
-    }
+				Mat frame;
+				while (cap.read(frame)) {
+					if (frame.empty()) break;
+					string asciiFrame = convertMatToAscii(frame, desiredWidth, asciiChars);
+					clearConsole();
+					cout << asciiFrame << flush;
+					this_thread::sleep_for(chrono::milliseconds(static_cast<int>(1000.0 / fps)));
+				}
+				cap.release();
+			}
+		} else {
+			// Обработка обычного видео (без зацикливания)
+			VideoCapture cap(inputFile);
+			if (!cap.isOpened()) {
+				cerr << "Ошибка: не удалось открыть файл " << inputFile << endl;
+				return 1;
+			}
+			double fps = cap.get(CAP_PROP_FPS);
+			if (fps <= 0) fps = 10;
+			Mat frame;
+			while (cap.read(frame)) {
+				if (frame.empty()) break;
+				string asciiFrame = convertMatToAscii(frame, desiredWidth, asciiChars);
+				clearConsole();
+				cout << asciiFrame << flush;
+				this_thread::sleep_for(chrono::milliseconds(static_cast<int>(1000.0 / fps)));
+			}
+			cap.release();
+		}
+	} else {
+		// Обработка статичного изображения
+		Mat img = imread(inputFile, IMREAD_COLOR);
+		if (img.empty()) {
+			cerr << "Ошибка: не удалось загрузить изображение " << inputFile << endl;
+			return 1;
+		}
+		string asciiImage = convertMatToAscii(img, desiredWidth, asciiChars);
+		cout << asciiImage;
+	}
 
-    return 0;
+	return 0;
 }
