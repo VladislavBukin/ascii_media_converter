@@ -580,11 +580,11 @@ private:
         charsetLayout->addWidget(m_imgCharsetEdit);
 
         m_imgPresetCombo = new QComboBox;
-        m_imgPresetCombo->addItem("Default: @%#*+=-:. ", "@%#*+=-:. ");
+        m_imgPresetCombo->addItem("Default:  .,:;i1tfLCG08@", ".,:;i1tfLCG08@");
         m_imgPresetCombo->addItem("Preset 1:  .'`^\\\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$",
                                    " .'`^\\\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$");
         m_imgPresetCombo->addItem("Preset 2:  .:-=+*#%@", ".:-=+*#%@");
-        m_imgPresetCombo->addItem("Preset 3:  .,:;i1tfLCG08@", ".,:;i1tfLCG08@");
+        m_imgPresetCombo->addItem("Preset 3: @%#*+=-:. ", "@%#*+=-:. ");
         charsetLayout->addWidget(m_imgPresetCombo);
         connect(m_imgPresetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
                 [this](int index){
