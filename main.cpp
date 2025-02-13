@@ -127,7 +127,6 @@ private:
 //
 // Класс AsciiArtApp – главное окно приложения.
 // Реализованы три вкладки: "Изображение в ASCII", "Видео в ASCII" и "GIF в ASCII".
-// На вкладках видео и GIF добавлена возможность сохранить исходный файл,
 // а для GIF воспроизведение зациклено.
 // Добавлены пресеты набора символов – QComboBox для каждой вкладки.
 class AsciiArtApp : public QMainWindow {
@@ -430,20 +429,6 @@ private slots:
         }
     }
 
-    // Слот для сохранения исходного видео
-    void saveOriginalVideo() {
-        if (m_currentVideoPath.isEmpty()) {
-            QMessageBox::warning(this, "Ошибка", "Видео не выбрано.");
-            return;
-        }
-        QString dest = QFileDialog::getSaveFileName(this, "Сохранить видео в исходном формате");
-        if (!dest.isEmpty()) {
-            if (QFile::copy(m_currentVideoPath, dest))
-                QMessageBox::information(this, "Успех", "Видео сохранено:\n" + dest);
-            else
-                QMessageBox::critical(this, "Ошибка", "Не удалось сохранить видео.");
-        }
-    }
 
     // --- Слоты для работы с GIF ---
     void openGif() {
@@ -539,19 +524,6 @@ private slots:
     }
 
     // Слот для сохранения исходного GIF
-    void saveOriginalGif() {
-        if (m_currentGifPath.isEmpty()) {
-            QMessageBox::warning(this, "Ошибка", "GIF не выбран.");
-            return;
-        }
-        QString dest = QFileDialog::getSaveFileName(this, "Сохранить GIF в исходном формате");
-        if (!dest.isEmpty()) {
-            if (QFile::copy(m_currentGifPath, dest))
-                QMessageBox::information(this, "Успех", "GIF сохранен:\n" + dest);
-            else
-                QMessageBox::critical(this, "Ошибка", "Не удалось сохранить GIF.");
-        }
-    }
 
 private:
     // --- Инициализация вкладки "Изображение" ---
@@ -576,7 +548,7 @@ private:
         // Группа для набора символов и пресетов
         QGroupBox* charsetGroup = new QGroupBox("Набор символов");
         QVBoxLayout* charsetLayout = new QVBoxLayout;
-        m_imgCharsetEdit = new QLineEdit("@%#*+=-:. ");
+        m_imgCharsetEdit = new QLineEdit(".,:;i1tfLCG08@");
         charsetLayout->addWidget(m_imgCharsetEdit);
 
         m_imgPresetCombo = new QComboBox;
@@ -659,10 +631,6 @@ private:
         m_btnStop->setEnabled(false);
         controlsLayout->addWidget(m_btnStop);
 
-        // Кнопка для сохранения исходного видео
-        m_btnSaveVideo = new QPushButton("Сохранить видео");
-        connect(m_btnSaveVideo, &QPushButton::clicked, this, &AsciiArtApp::saveOriginalVideo);
-        controlsLayout->addWidget(m_btnSaveVideo);
 
         layout->addLayout(controlsLayout);
 
@@ -724,10 +692,6 @@ private:
         connect(m_btnStopGif, &QPushButton::clicked, this, &AsciiArtApp::stopGif);
         m_btnStopGif->setEnabled(false);
         controlsLayout->addWidget(m_btnStopGif);
-
-        m_btnSaveGif = new QPushButton("Сохранить GIF");
-        connect(m_btnSaveGif, &QPushButton::clicked, this, &AsciiArtApp::saveOriginalGif);
-        controlsLayout->addWidget(m_btnSaveGif);
 
         layout->addLayout(controlsLayout);
 
