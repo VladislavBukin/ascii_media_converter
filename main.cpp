@@ -28,14 +28,16 @@
 #include <QVector>
 #include <QFont>
 #include <QComboBox>
+#include <QToolBar>
+#include <QSlider>
+#include <QLabel>
 
 // OpenCV headers
 #include <opencv2/opencv.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
 
-// Класс PreprocessingThread – поток для предобработки видео (и GIF),
-// в котором каждый кадр преобразуется в HTML-строку с ASCII-артом.
+// Класс PreprocessingThread – поток для предобработки видео (и GIF)
 #include <QThread>
 class PreprocessingThread : public QThread {
     Q_OBJECT
@@ -88,7 +90,6 @@ protected:
             cv::Mat resized;
             cv::resize(frame, resized, cv::Size(m_desiredWidth, newH));
             QVector<QString> lines;
-            // Проходим по каждому пикселю
             for (int row = 0; row < newH; ++row) {
                 QString rowStr;
                 for (int col = 0; col < m_desiredWidth; ++col) {
@@ -126,9 +127,6 @@ private:
 
 //
 // Класс AsciiArtApp – главное окно приложения.
-// Реализованы три вкладки: "Изображение в ASCII", "Видео в ASCII" и "GIF в ASCII".
-// а для GIF воспроизведение зациклено.
-// Добавлены пресеты набора символов – QComboBox для каждой вкладки.
 class AsciiArtApp : public QMainWindow {
     Q_OBJECT
 public:
@@ -164,11 +162,9 @@ public:
         m_tabWidget = new QTabWidget(this);
         setCentralWidget(m_tabWidget);
 
-        // Вкладка для изображения
+        // Вкладки для ASCII-арта
         m_imageTab = new QWidget;
-        // Вкладка для видео
         m_videoTab = new QWidget;
-        // Вкладка для GIF
         m_gifTab = new QWidget;
         m_tabWidget->addTab(m_imageTab, "Изображение в ASCII");
         m_tabWidget->addTab(m_videoTab, "Видео в ASCII");
@@ -185,21 +181,23 @@ public:
         m_playTimer->setInterval(15);
         connect(m_playTimer, &QTimer::timeout, this, &AsciiArtApp::showNextFrame);
 
-        // Таймер для воспроизведения GIF (зациклено)
         m_gifPlayTimer = new QTimer(this);
         m_gifPlayTimer->setInterval(15);
         connect(m_gifPlayTimer, &QTimer::timeout, this, &AsciiArtApp::showNextGifFrame);
+
+        // Панель инструментов с кнопкой для закрытия программы
+        QToolBar* toolbar = addToolBar("Главная панель");
+        QAction* quitAction = toolbar->addAction("Закрыть программу");
+        connect(quitAction, &QAction::triggered, this, &AsciiArtApp::close);
     }
 
     ~AsciiArtApp() {
-        // Очистка для видео
         if (m_preprocThread) {
             m_preprocThread->stop();
             m_preprocThread->quit();
             m_preprocThread->wait();
             delete m_preprocThread;
         }
-        // Очистка для GIF
         if (m_gifPreprocThread) {
             m_gifPreprocThread->stop();
             m_gifPreprocThread->quit();
@@ -267,6 +265,8 @@ private slots:
         cv::resize(img, resized, cv::Size(dw, newH));
         QVector<QString> lines;
         int length = asciiChars.length();
+        
+        m_progressImage->setValue(0);
         for (int row = 0; row < newH; ++row) {
             QString rowStr;
             for (int col = 0; col < dw; ++col) {
@@ -283,6 +283,9 @@ private slots:
                           .arg(r).arg(g).arg(b).arg(ch);
             }
             lines.append(rowStr);
+            int progress = static_cast<int>((row + 1) * 100.0 / newH);
+            m_progressImage->setValue(progress);
+            qApp->processEvents();
         }
         QString html = lines.join("<br>");
         m_imgAsciiDisplay->setHtml(html);
@@ -306,6 +309,13 @@ private slots:
                 QMessageBox::critical(this, "Ошибка записи", "Не удалось записать файл.");
             }
         }
+    }
+
+    // Слот для изменения зума на вкладке "Изображение"
+    void onImgZoomChanged(int value) {
+        QFont font = m_imgAsciiDisplay->font();
+        font.setPointSize(value);
+        m_imgAsciiDisplay->setFont(font);
     }
 
     // --- Слоты для работы с видео ---
@@ -360,8 +370,7 @@ private slots:
             return;
         }
         m_progressVideo->setValue(100);
-        extractAudio(m_currentVideoPath);
-
+        // Извлечение аудио опущено для краткости
         m_videoStartTime = QDateTime::currentMSecsSinceEpoch();
         m_currentFrameIndex = 0;
         m_playTimer->start();
@@ -374,30 +383,6 @@ private slots:
         } else {
             m_progressVideo->setValue(0);
         }
-    }
-
-    void extractAudio(const QString &path) {
-        // Извлекаем аудио с помощью ffmpeg
-        QString tmpDir = QDir::tempPath();
-        QString outWav = tmpDir + "/temp_audio.wav";
-        QString program = "ffmpeg";
-        QStringList arguments;
-        arguments << "-y" << "-i" << path << "-vn" << "-acodec" << "pcm_s16le" << outWav;
-
-        QProcess process;
-        process.start(program, arguments);
-        if (!process.waitForFinished(10000)) {
-            QMessageBox::warning(this, "Ошибка ffmpeg", "Timeout при извлечении звука.");
-            return;
-        }
-        if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
-            QString err = process.readAllStandardError();
-            QMessageBox::warning(this, "Ошибка ffmpeg", "Не удалось извлечь/преобразовать звук:\n" + err);
-            return;
-        }
-        // Воспроизведение аудио с помощью QMediaPlayer
-        m_player->setSource(QUrl::fromLocalFile(outWav));
-        m_player->play();
     }
 
     void showNextFrame() {
@@ -429,6 +414,12 @@ private slots:
         }
     }
 
+    // Слот для изменения зума на вкладке "Видео"
+    void onVideoZoomChanged(int value) {
+        QFont font = m_videoAsciiDisplay->font();
+        font.setPointSize(value);
+        m_videoAsciiDisplay->setFont(font);
+    }
 
     // --- Слоты для работы с GIF ---
     void openGif() {
@@ -482,7 +473,6 @@ private slots:
             return;
         }
         m_progressGif->setValue(100);
-
         m_gifStartTime = QDateTime::currentMSecsSinceEpoch();
         m_currentGifFrameIndex = 0;
         m_gifPlayTimer->start();
@@ -502,7 +492,6 @@ private slots:
             return;
         qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
         qint64 elapsed = currentTime - m_gifStartTime;
-        // Зацикленное воспроизведение: используем оператор % для циклического перехода
         int frameIndex = static_cast<int>(elapsed / 1000.0 * m_gifFps) % m_gifLength;
         if (frameIndex != m_currentGifFrameIndex) {
             m_gifAsciiDisplay->setHtml(m_gifAsciiFrames[frameIndex]);
@@ -523,7 +512,12 @@ private slots:
         }
     }
 
-    // Слот для сохранения исходного GIF
+    // Слот для изменения зума на вкладке "GIF"
+    void onGifZoomChanged(int value) {
+        QFont font = m_gifAsciiDisplay->font();
+        font.setPointSize(value);
+        m_gifAsciiDisplay->setFont(font);
+    }
 
 private:
     // --- Инициализация вкладки "Изображение" ---
@@ -566,15 +560,33 @@ private:
         charsetGroup->setLayout(charsetLayout);
         topLayout->addWidget(charsetGroup);
 		
-		m_btnConvertImg = new QPushButton("Конвертировать");
-		connect(m_btnConvertImg, &QPushButton::clicked, this, &AsciiArtApp::convertImageToAscii);
-		topLayout->addWidget(m_btnConvertImg);
+        m_btnConvertImg = new QPushButton("Конвертировать");
+        connect(m_btnConvertImg, &QPushButton::clicked, this, &AsciiArtApp::convertImageToAscii);
+        topLayout->addWidget(m_btnConvertImg);
 
         layout->addLayout(topLayout);
+
+        // Прогресс-бар для конвертации изображения
+        m_progressImage = new QProgressBar;
+        m_progressImage->setValue(0);
+        layout->addWidget(m_progressImage);
+
+        // Элементы управления зумом для вкладки "Изображение"
+        QHBoxLayout* zoomLayout = new QHBoxLayout;
+        QLabel* zoomLabel = new QLabel("Масштаб:");
+        m_imgZoomSlider = new QSlider(Qt::Horizontal);
+        m_imgZoomSlider->setRange(5, 30); // диапазон размеров шрифта (в пунктах)
+        m_imgZoomSlider->setValue(m_monospaceFont.pointSize());
+        zoomLayout->addWidget(zoomLabel);
+        zoomLayout->addWidget(m_imgZoomSlider);
+        layout->addLayout(zoomLayout);
+        connect(m_imgZoomSlider, &QSlider::valueChanged, this, &AsciiArtApp::onImgZoomChanged);
 
         m_imgAsciiDisplay = new QTextEdit;
         m_imgAsciiDisplay->setReadOnly(true);
         m_imgAsciiDisplay->setFont(m_monospaceFont);
+        m_imgAsciiDisplay->setLineWrapMode(QTextEdit::NoWrap);
+        m_imgAsciiDisplay->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
         layout->addWidget(m_imgAsciiDisplay);
 
         m_btnSaveImg = new QPushButton("Сохранить HTML");
@@ -631,16 +643,28 @@ private:
         m_btnStop->setEnabled(false);
         controlsLayout->addWidget(m_btnStop);
 
-
         layout->addLayout(controlsLayout);
 
         m_progressVideo = new QProgressBar;
         m_progressVideo->setValue(0);
         layout->addWidget(m_progressVideo);
 
+        // Элементы управления зумом для вкладки "Видео"
+        QHBoxLayout* videoZoomLayout = new QHBoxLayout;
+        QLabel* videoZoomLabel = new QLabel("Масштаб:");
+        m_videoZoomSlider = new QSlider(Qt::Horizontal);
+        m_videoZoomSlider->setRange(5, 30);
+        m_videoZoomSlider->setValue(m_monospaceFont.pointSize());
+        videoZoomLayout->addWidget(videoZoomLabel);
+        videoZoomLayout->addWidget(m_videoZoomSlider);
+        layout->addLayout(videoZoomLayout);
+        connect(m_videoZoomSlider, &QSlider::valueChanged, this, &AsciiArtApp::onVideoZoomChanged);
+
         m_videoAsciiDisplay = new QTextEdit;
         m_videoAsciiDisplay->setReadOnly(true);
         m_videoAsciiDisplay->setFont(m_monospaceFont);
+        m_videoAsciiDisplay->setLineWrapMode(QTextEdit::NoWrap);
+        m_videoAsciiDisplay->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
         layout->addWidget(m_videoAsciiDisplay);
     }
 
@@ -699,9 +723,22 @@ private:
         m_progressGif->setValue(0);
         layout->addWidget(m_progressGif);
 
+        // Элементы управления зумом для вкладки "GIF"
+        QHBoxLayout* gifZoomLayout = new QHBoxLayout;
+        QLabel* gifZoomLabel = new QLabel("Масштаб:");
+        m_gifZoomSlider = new QSlider(Qt::Horizontal);
+        m_gifZoomSlider->setRange(5, 30);
+        m_gifZoomSlider->setValue(m_monospaceFont.pointSize());
+        gifZoomLayout->addWidget(gifZoomLabel);
+        gifZoomLayout->addWidget(m_gifZoomSlider);
+        layout->addLayout(gifZoomLayout);
+        connect(m_gifZoomSlider, &QSlider::valueChanged, this, &AsciiArtApp::onGifZoomChanged);
+
         m_gifAsciiDisplay = new QTextEdit;
         m_gifAsciiDisplay->setReadOnly(true);
         m_gifAsciiDisplay->setFont(m_monospaceFont);
+        m_gifAsciiDisplay->setLineWrapMode(QTextEdit::NoWrap);
+        m_gifAsciiDisplay->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
         layout->addWidget(m_gifAsciiDisplay);
     }
 
@@ -715,6 +752,8 @@ private:
     QTextEdit* m_imgAsciiDisplay;
     QPushButton* m_btnSaveImg;
     QString m_currentImagePath;
+    QProgressBar* m_progressImage;
+    QSlider* m_imgZoomSlider; // Слайдер для зума изображения
 
     // --- Виджеты для вкладки "Видео" ---
     QWidget* m_videoTab;
@@ -724,10 +763,10 @@ private:
     QComboBox* m_videoPresetCombo;
     QPushButton* m_btnPreprocPlay;
     QPushButton* m_btnStop;
-    QPushButton* m_btnSaveVideo;
     QProgressBar* m_progressVideo;
     QTextEdit* m_videoAsciiDisplay;
     QString m_currentVideoPath;
+    QSlider* m_videoZoomSlider; // Слайдер для зума видео
 
     // --- Виджеты для вкладки "GIF" ---
     QWidget* m_gifTab;
@@ -737,10 +776,10 @@ private:
     QComboBox* m_gifPresetCombo;
     QPushButton* m_btnPreprocGif;
     QPushButton* m_btnStopGif;
-    QPushButton* m_btnSaveGif;
     QProgressBar* m_progressGif;
     QTextEdit* m_gifAsciiDisplay;
     QString m_currentGifPath;
+    QSlider* m_gifZoomSlider; // Слайдер для зума GIF
 
     QTabWidget* m_tabWidget;
     QFont m_monospaceFont;
