@@ -130,91 +130,97 @@ private:
 class AsciiArtApp : public QMainWindow {
     Q_OBJECT
 public:
-    AsciiArtApp(QWidget* parent = nullptr)
-        : QMainWindow(parent),
-          m_preprocThread(nullptr),
-          m_videoFps(24.0),
-          m_videoLength(0),
-          m_videoStartTime(0),
-          m_currentFrameIndex(0),
-          m_gifPreprocThread(nullptr),
-          m_gifFps(24.0),
-          m_gifLength(0),
-          m_gifStartTime(0),
-          m_currentGifFrameIndex(0)
-    {
-        setWindowTitle("Генератор ASCII-арта");
-        resize(700, 700);
-        QApplication::setStyle(QStyleFactory::create("Fusion"));
+		AsciiArtApp(QWidget* parent = nullptr)
+			: QMainWindow(parent),
+			m_preprocThread(nullptr),
+			m_videoFps(24.0),
+			m_videoLength(0),
+			m_videoStartTime(0),
+			m_currentFrameIndex(0),
+			m_gifPreprocThread(nullptr),
+			m_gifFps(24.0),
+			m_gifLength(0),
+			m_gifStartTime(0),
+			m_currentGifFrameIndex(0)
+	{
+		setWindowTitle("Генератор ASCII-арта");
+		resize(700, 700);
+		QApplication::setStyle(QStyleFactory::create("Fusion"));
 
-        QPalette darkPalette;
-        darkPalette.setColor(QPalette::Window, QColor(53, 53, 53));
-        darkPalette.setColor(QPalette::WindowText, Qt::white);
-        darkPalette.setColor(QPalette::Base, QColor(15, 15, 15));
-        darkPalette.setColor(QPalette::AlternateBase, QColor(53, 53, 53));
-        darkPalette.setColor(QPalette::Text, Qt::white);
-        darkPalette.setColor(QPalette::Button, QColor(53, 53, 53));
-        darkPalette.setColor(QPalette::ButtonText, Qt::white);
-        QApplication::setPalette(darkPalette);
+		QPalette darkPalette;
+		darkPalette.setColor(QPalette::Window, QColor(53, 53, 53));
+		darkPalette.setColor(QPalette::WindowText, Qt::white);
+		darkPalette.setColor(QPalette::Base, QColor(15, 15, 15));
+		darkPalette.setColor(QPalette::AlternateBase, QColor(53, 53, 53));
+		darkPalette.setColor(QPalette::Text, Qt::white);
+		darkPalette.setColor(QPalette::Button, QColor(53, 53, 53));
+		darkPalette.setColor(QPalette::ButtonText, Qt::white);
+		QApplication::setPalette(darkPalette);
 
-        m_monospaceFont = QFont("Courier New", 10);
+		m_monospaceFont = QFont("Courier New", 10);
 
-        m_tabWidget = new QTabWidget(this);
-        setCentralWidget(m_tabWidget);
+		m_tabWidget = new QTabWidget(this);
+		setCentralWidget(m_tabWidget);
 
-        // Вкладки для ASCII-арта
-        m_imageTab = new QWidget;
-        m_videoTab = new QWidget;
-        m_gifTab = new QWidget;
-        m_tabWidget->addTab(m_imageTab, "Изображение в ASCII");
-        m_tabWidget->addTab(m_videoTab, "Видео в ASCII");
-        m_tabWidget->addTab(m_gifTab, "GIF в ASCII");
+		// Создаём вкладки
+		m_imageTab = new QWidget;
+		m_videoTab = new QWidget;
+		m_gifTab = new QWidget;
+		m_tabWidget->addTab(m_imageTab, "Изображение в ASCII");
+		m_tabWidget->addTab(m_videoTab, "Видео в ASCII");
+		m_tabWidget->addTab(m_gifTab, "GIF в ASCII");
 
-        initImageTab();
-        initVideoTab();
-        initGifTab();
+		initImageTab();
+		initVideoTab();
+		initGifTab();
 
-        // Инициализация медиаплеера для аудио (видео)
-        m_player = new QMediaPlayer(this);
+		// Инициализация медиаплеера для аудио (видео)
+		m_player = new QMediaPlayer(this);
 
-        m_playTimer = new QTimer(this);
-        m_playTimer->setInterval(15);
-        connect(m_playTimer, &QTimer::timeout, this, &AsciiArtApp::showNextFrame);
+		m_playTimer = new QTimer(this);
+		m_playTimer->setInterval(15);
+		connect(m_playTimer, &QTimer::timeout, this, &AsciiArtApp::showNextFrame);
 
-        m_gifPlayTimer = new QTimer(this);
-        m_gifPlayTimer->setInterval(15);
-        connect(m_gifPlayTimer, &QTimer::timeout, this, &AsciiArtApp::showNextGifFrame);
+		m_gifPlayTimer = new QTimer(this);
+		m_gifPlayTimer->setInterval(15);
+		connect(m_gifPlayTimer, &QTimer::timeout, this, &AsciiArtApp::showNextGifFrame);
 
-        // Панель инструментов с кнопкой для закрытия программы
-        QToolBar* toolbar = addToolBar("Главная панель");
-        QAction* quitAction = toolbar->addAction("Закрыть программу");
-        connect(quitAction, &QAction::triggered, this, &AsciiArtApp::close);
-    }
+		QPushButton* closeBtn = new QPushButton("Закрыть");
+//		int tabHeight = m_tabWidget->tabBar()->sizeHint().height();
 
-    ~AsciiArtApp() {
-        if (m_preprocThread) {
-            m_preprocThread->stop();
-            m_preprocThread->quit();
-            m_preprocThread->wait();
-            delete m_preprocThread;
-        }
-        if (m_gifPreprocThread) {
-            m_gifPreprocThread->stop();
-            m_gifPreprocThread->quit();
-            m_gifPreprocThread->wait();
-            delete m_gifPreprocThread;
-        }
-    }
+		closeBtn->setStyleSheet(
+				"QPushButton { "
+				"   background-color: red; "
+				"   color: white; "
+				"}"
+				);
+		connect(closeBtn, &QPushButton::clicked, this, &AsciiArtApp::close);
+		m_tabWidget->setCornerWidget(closeBtn, Qt::TopRightCorner);
+	}
+		~AsciiArtApp() {
+			if (m_preprocThread) {
+				m_preprocThread->stop();
+				m_preprocThread->quit();
+				m_preprocThread->wait();
+				delete m_preprocThread;
+			}
+			if (m_gifPreprocThread) {
+				m_gifPreprocThread->stop();
+				m_gifPreprocThread->quit();
+				m_gifPreprocThread->wait();
+				delete m_gifPreprocThread;
+			}
+		}
 
 protected:
-    void closeEvent(QCloseEvent* event) override {
-        m_playTimer->stop();
-        m_gifPlayTimer->stop();
-        if (m_preprocThread) {
-            m_preprocThread->stop();
-            m_preprocThread->quit();
-            m_preprocThread->wait();
-        }
+		void closeEvent(QCloseEvent* event) override {
+			m_playTimer->stop();
+			m_gifPlayTimer->stop();
+			if (m_preprocThread) {
+				m_preprocThread->stop();
+				m_preprocThread->quit();
+				m_preprocThread->wait();
+			}
         if (m_gifPreprocThread) {
             m_gifPreprocThread->stop();
             m_gifPreprocThread->quit();
