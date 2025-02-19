@@ -521,79 +521,80 @@ private slots:
 
 private:
     // --- Инициализация вкладки "Изображение" ---
-    void initImageTab() {
-        QVBoxLayout* layout = new QVBoxLayout;
-        m_imageTab->setLayout(layout);
 
-        QHBoxLayout* topLayout = new QHBoxLayout;
-        m_btnOpenImg = new QPushButton("Открыть изображение");
-        connect(m_btnOpenImg, &QPushButton::clicked, this, &AsciiArtApp::openImage);
-        topLayout->addWidget(m_btnOpenImg);
+	void initImageTab() {
+		QVBoxLayout* layout = new QVBoxLayout;
+		m_imageTab->setLayout(layout);
 
-        QGroupBox* widthGroup = new QGroupBox("Ширина");
-        QFormLayout* widthForm = new QFormLayout;
-        m_imgSpinWidth = new QSpinBox;
-        m_imgSpinWidth->setRange(10, 800);
-        m_imgSpinWidth->setValue(80);
-        widthForm->addRow("Символов:", m_imgSpinWidth);
-        widthGroup->setLayout(widthForm);
-        topLayout->addWidget(widthGroup);
+		QHBoxLayout* topLayout = new QHBoxLayout;
+		m_btnOpenImg = new QPushButton("Открыть изображение");
+		connect(m_btnOpenImg, &QPushButton::clicked, this, &AsciiArtApp::openImage);
+		topLayout->addWidget(m_btnOpenImg);
 
-        // Группа для набора символов и пресетов
-        QGroupBox* charsetGroup = new QGroupBox("Набор символов");
-        QVBoxLayout* charsetLayout = new QVBoxLayout;
-        m_imgCharsetEdit = new QLineEdit(".,:;i1tfLCG08@");
-        charsetLayout->addWidget(m_imgCharsetEdit);
+		QGroupBox* widthGroup = new QGroupBox("Ширина");
+		QFormLayout* widthForm = new QFormLayout;
+		m_imgSpinWidth = new QSpinBox;
+		m_imgSpinWidth->setRange(10, 800);
+		m_imgSpinWidth->setValue(80);
+		widthForm->addRow("Символов:", m_imgSpinWidth);
+		widthGroup->setLayout(widthForm);
+		topLayout->addWidget(widthGroup);
 
-        m_imgPresetCombo = new QComboBox;
-        m_imgPresetCombo->addItem("Default:  .,:;i1tfLCG08@", ".,:;i1tfLCG08@");
-        m_imgPresetCombo->addItem("Preset 1:  .'`^\\\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$",
-                                   " .'`^\\\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$");
-        m_imgPresetCombo->addItem("Preset 2:  .:-=+*#%@", ".:-=+*#%@");
-        m_imgPresetCombo->addItem("Preset 3: @%#*+=-:. ", "@%#*+=-:. ");
-        charsetLayout->addWidget(m_imgPresetCombo);
-        connect(m_imgPresetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-                [this](int index){
-                    QString preset = m_imgPresetCombo->itemData(index).toString();
-                    m_imgCharsetEdit->setText(preset);
-                });
-        charsetGroup->setLayout(charsetLayout);
-        topLayout->addWidget(charsetGroup);
-		
-        m_btnConvertImg = new QPushButton("Конвертировать");
-        connect(m_btnConvertImg, &QPushButton::clicked, this, &AsciiArtApp::convertImageToAscii);
-        topLayout->addWidget(m_btnConvertImg);
+		// Группа для набора символов и пресетов
+		QGroupBox* charsetGroup = new QGroupBox("Набор символов");
+		QVBoxLayout* charsetLayout = new QVBoxLayout;
+		m_imgCharsetEdit = new QLineEdit(".,:;i1tfLCG08@");
+		charsetLayout->addWidget(m_imgCharsetEdit);
 
-        layout->addLayout(topLayout);
+		m_imgPresetCombo = new QComboBox;
+		m_imgPresetCombo->addItem("Default:  .,:;i1tfLCG08@", ".,:;i1tfLCG08@");
+		m_imgPresetCombo->addItem("Preset 1:  .'`^\\\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$",
+				" .'`^\\\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$");
+		m_imgPresetCombo->addItem("Preset 2:  .:-=+*#%@", ".:-=+*#%@");
+		m_imgPresetCombo->addItem("Preset 3: @%#*+=-:. ", "@%#*+=-:. ");
+		charsetLayout->addWidget(m_imgPresetCombo);
+		connect(m_imgPresetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+				[this](int index){
+				QString preset = m_imgPresetCombo->itemData(index).toString();
+				m_imgCharsetEdit->setText(preset);
+				});
+		charsetGroup->setLayout(charsetLayout);
+		topLayout->addWidget(charsetGroup);
 
-        // Прогресс-бар для конвертации изображения
-        m_progressImage = new QProgressBar;
-        m_progressImage->setValue(0);
-        layout->addWidget(m_progressImage);
+		m_btnConvertImg = new QPushButton("Конвертировать");
+		connect(m_btnConvertImg, &QPushButton::clicked, this, &AsciiArtApp::convertImageToAscii);
+		topLayout->addWidget(m_btnConvertImg);
 
-        // Элементы управления зумом для вкладки "Изображение"
-        QHBoxLayout* zoomLayout = new QHBoxLayout;
-        QLabel* zoomLabel = new QLabel("Масштаб:");
-        m_imgZoomSlider = new QSlider(Qt::Horizontal);
-        m_imgZoomSlider->setRange(5, 30); // диапазон размеров шрифта (в пунктах)
-        m_imgZoomSlider->setValue(m_monospaceFont.pointSize());
-        zoomLayout->addWidget(zoomLabel);
-        zoomLayout->addWidget(m_imgZoomSlider);
-        layout->addLayout(zoomLayout);
-        connect(m_imgZoomSlider, &QSlider::valueChanged, this, &AsciiArtApp::onImgZoomChanged);
+		layout->addLayout(topLayout);
 
-        m_imgAsciiDisplay = new QTextEdit;
-        m_imgAsciiDisplay->setReadOnly(true);
-        m_imgAsciiDisplay->setFont(m_monospaceFont);
-        m_imgAsciiDisplay->setLineWrapMode(QTextEdit::NoWrap);
-        m_imgAsciiDisplay->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-        layout->addWidget(m_imgAsciiDisplay);
+		// Элементы управления зумом для вкладки "Изображение"
+		QHBoxLayout* zoomLayout = new QHBoxLayout;
+		QLabel* zoomLabel = new QLabel("Масштаб:");
+		m_imgZoomSlider = new QSlider(Qt::Horizontal);
+		m_imgZoomSlider->setRange(5, 30); // диапазон размеров шрифта (в пунктах)
+		m_imgZoomSlider->setValue(m_monospaceFont.pointSize());
+		zoomLayout->addWidget(zoomLabel);
+		zoomLayout->addWidget(m_imgZoomSlider);
+		layout->addLayout(zoomLayout);
+		connect(m_imgZoomSlider, &QSlider::valueChanged, this, &AsciiArtApp::onImgZoomChanged);
 
-        m_btnSaveImg = new QPushButton("Сохранить HTML");
-        connect(m_btnSaveImg, &QPushButton::clicked, this, &AsciiArtApp::saveHtmlImage);
-        layout->addWidget(m_btnSaveImg);
-    }
+		m_imgAsciiDisplay = new QTextEdit;
+		m_imgAsciiDisplay->setReadOnly(true);
+		m_imgAsciiDisplay->setFont(m_monospaceFont);
+		m_imgAsciiDisplay->setLineWrapMode(QTextEdit::NoWrap);
+		m_imgAsciiDisplay->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+		layout->addWidget(m_imgAsciiDisplay);
 
+		m_progressImage = new QProgressBar;
+		m_progressImage->setValue(0);
+		m_progressImage->setFixedHeight(10);  // делаем его значительно тоньше
+		layout->addWidget(m_progressImage);
+
+		m_btnSaveImg = new QPushButton("Сохранить HTML");
+		connect(m_btnSaveImg, &QPushButton::clicked, this, &AsciiArtApp::saveHtmlImage);
+		layout->addWidget(m_btnSaveImg);
+
+	}
     // --- Инициализация вкладки "Видео" ---
     void initVideoTab() {
         QVBoxLayout* layout = new QVBoxLayout;
