@@ -32,6 +32,7 @@
 #include <QSlider>
 #include <QLabel>
 #include <QCheckBox>
+#include <QAudioOutput>  // Новый заголовок для аудиовыхода
 
 // OpenCV headers
 #include <opencv2/opencv.hpp>
@@ -185,6 +186,8 @@ public:
         initGifTab();
 
         m_player = new QMediaPlayer(this);
+        m_audioOutput = new QAudioOutput(this); // Создаём аудиовыход
+        m_player->setAudioOutput(m_audioOutput);  // Устанавливаем аудиовыход для медиаплеера
 
         m_playTimer = new QTimer(this);
         m_playTimer->setInterval(15);
@@ -249,69 +252,69 @@ private slots:
         }
     }
 
-	void convertImageToAscii() {
-		if (m_currentImagePath.isEmpty()) {
-			QMessageBox::warning(this, "Ошибка", "Сначала выберите изображение.");
-			return;
-		}
-		cv::Mat img = cv::imread(m_currentImagePath.toStdString());
-		if (img.empty()) {
-			QMessageBox::warning(this, "Ошибка", "Не удалось открыть изображение.");
-			return;
-		}
-	
-		int dw = m_imgSpinWidth->value();
-		QString asciiChars = m_imgCharsetEdit->text();
-		if (asciiChars.isEmpty()) {
-			QMessageBox::warning(this, "Ошибка", "Набор символов пуст.");
-			return;
-		}
-	
-		int h_ = img.rows;
-		int w_ = img.cols;
-		double aspect = static_cast<double>(h_) / w_;
-		int newH = static_cast<int>(dw * aspect * 0.55);
-		if (newH < 1)
-			newH = 1;
-	
-		cv::Mat resized;
-		cv::resize(img, resized, cv::Size(dw, newH));
-		QVector<QString> lines;
-		int length = asciiChars.length();
-	
-		m_progressImage->setValue(0);
-		for (int row = 0; row < newH; ++row) {
-			QString rowStr;
-			for (int col = 0; col < dw; ++col) {
-				cv::Vec3b pixel = resized.at<cv::Vec3b>(row, col);
-				int b = pixel[0];
-				int g = pixel[1];
-				int r = pixel[2];
-				double gray = 0.299 * r + 0.587 * g + 0.114 * b;
-				int idx = static_cast<int>(gray / 255 * (length - 1));
-				if (idx < 0) idx = 0;
-				if (idx >= length) idx = length - 1;
-				QChar ch = asciiChars.at(idx);
-	
-				if (m_imgBlackWhite) {
-					rowStr += ch;
-				} else {
-					rowStr += QString("<span style=\"color: rgb(%1,%2,%3)\">%4</span>")
-						.arg(r).arg(g).arg(b).arg(ch);
-				}
-			}
-			lines.append(rowStr);
-			int progress = static_cast<int>((row + 1) * 100.0 / newH);
-			m_progressImage->setValue(progress);
-			qApp->processEvents();
-		}
-		QString result = lines.join("<br>");
-		if (m_imgBlackWhite) {
-			m_imgAsciiDisplay->setPlainText(lines.join("\n"));
-		} else {
-			m_imgAsciiDisplay->setHtml(result);
-		}
-	}
+    void convertImageToAscii() {
+        if (m_currentImagePath.isEmpty()) {
+            QMessageBox::warning(this, "Ошибка", "Сначала выберите изображение.");
+            return;
+        }
+        cv::Mat img = cv::imread(m_currentImagePath.toStdString());
+        if (img.empty()) {
+            QMessageBox::warning(this, "Ошибка", "Не удалось открыть изображение.");
+            return;
+        }
+    
+        int dw = m_imgSpinWidth->value();
+        QString asciiChars = m_imgCharsetEdit->text();
+        if (asciiChars.isEmpty()) {
+            QMessageBox::warning(this, "Ошибка", "Набор символов пуст.");
+            return;
+        }
+    
+        int h_ = img.rows;
+        int w_ = img.cols;
+        double aspect = static_cast<double>(h_) / w_;
+        int newH = static_cast<int>(dw * aspect * 0.55);
+        if (newH < 1)
+            newH = 1;
+    
+        cv::Mat resized;
+        cv::resize(img, resized, cv::Size(dw, newH));
+        QVector<QString> lines;
+        int length = asciiChars.length();
+    
+        m_progressImage->setValue(0);
+        for (int row = 0; row < newH; ++row) {
+            QString rowStr;
+            for (int col = 0; col < dw; ++col) {
+                cv::Vec3b pixel = resized.at<cv::Vec3b>(row, col);
+                int b = pixel[0];
+                int g = pixel[1];
+                int r = pixel[2];
+                double gray = 0.299 * r + 0.587 * g + 0.114 * b;
+                int idx = static_cast<int>(gray / 255 * (length - 1));
+                if (idx < 0) idx = 0;
+                if (idx >= length) idx = length - 1;
+                QChar ch = asciiChars.at(idx);
+    
+                if (m_imgBlackWhite) {
+                    rowStr += ch;
+                } else {
+                    rowStr += QString("<span style=\"color: rgb(%1,%2,%3)\">%4</span>")
+                        .arg(r).arg(g).arg(b).arg(ch);
+                }
+            }
+            lines.append(rowStr);
+            int progress = static_cast<int>((row + 1) * 100.0 / newH);
+            m_progressImage->setValue(progress);
+            qApp->processEvents();
+        }
+        QString result = lines.join("<br>");
+        if (m_imgBlackWhite) {
+            m_imgAsciiDisplay->setPlainText(lines.join("\n"));
+        } else {
+            m_imgAsciiDisplay->setHtml(result);
+        }
+    }
     void saveHtmlImage() {
         QString htmlCode = m_imgAsciiDisplay->toHtml();
         if (htmlCode.trimmed().isEmpty()) {
@@ -393,6 +396,10 @@ private slots:
         m_currentFrameIndex = 0;
         m_videoAsciiDisplay->clear();
         m_playTimer->start();
+
+        // Устанавливаем источник аудио и запускаем воспроизведение
+        m_player->setSource(QUrl::fromLocalFile(m_currentVideoPath));
+        m_player->play();
     }
 
     void onPreprocessingProgress(int processed, int total) {
@@ -404,25 +411,25 @@ private slots:
         }
     }
 
-	void showNextFrame() {
-		qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
-		qint64 elapsed = currentTime - m_videoStartTime;
-		int frameIndex = static_cast<int>(elapsed / 1000.0 * m_videoFps);
-		if (frameIndex >= m_videoLength) {
-			stopVideo();
-			return;
-		}
-		if (frameIndex != m_currentFrameIndex) {
-			if (m_videoBlackWhite) {
-				m_videoAsciiDisplay->setPlainText(m_asciiFrames[frameIndex]);
-			} else {
-				// Разбиваем на строки и соединяем с <br> для цветного режима
-				QStringList lines = m_asciiFrames[frameIndex].split("\n");
-				m_videoAsciiDisplay->setHtml(lines.join("<br>"));
-			}
-			m_currentFrameIndex = frameIndex;
-		}
-	}
+    void showNextFrame() {
+        qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
+        qint64 elapsed = currentTime - m_videoStartTime;
+        int frameIndex = static_cast<int>(elapsed / 1000.0 * m_videoFps);
+        if (frameIndex >= m_videoLength) {
+            stopVideo();
+            return;
+        }
+        if (frameIndex != m_currentFrameIndex) {
+            if (m_videoBlackWhite) {
+                m_videoAsciiDisplay->setPlainText(m_asciiFrames[frameIndex]);
+            } else {
+                // Разбиваем на строки и соединяем с <br> для цветного режима
+                QStringList lines = m_asciiFrames[frameIndex].split("\n");
+                m_videoAsciiDisplay->setHtml(lines.join("<br>"));
+            }
+            m_currentFrameIndex = frameIndex;
+        }
+    }
     void stopVideo() {
         m_playTimer->stop();
         if (m_player)
@@ -509,24 +516,24 @@ private slots:
             m_progressGif->setValue(0);
         }
     }
-	void showNextGifFrame() {
-		if (m_gifLength == 0)
-			return;
-		qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
-		qint64 elapsed = currentTime - m_gifStartTime;
-		int frameIndex = static_cast<int>(elapsed / 1000.0 * m_gifFps) % m_gifLength;
-		if (frameIndex != m_currentGifFrameIndex) {
-			if (m_gifBlackWhite) {
-				m_gifAsciiDisplay->setPlainText(m_gifAsciiFrames[frameIndex]);
-			} else {
-				// Разбиваем на строки и соединяем с <br> для цветного режима
-				QStringList lines = m_gifAsciiFrames[frameIndex].split("\n");
-				m_gifAsciiDisplay->setHtml(lines.join("<br>"));
-			}
-			m_currentGifFrameIndex = frameIndex;
-		}
-	}
-	void stopGif() {
+    void showNextGifFrame() {
+        if (m_gifLength == 0)
+            return;
+        qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
+        qint64 elapsed = currentTime - m_gifStartTime;
+        int frameIndex = static_cast<int>(elapsed / 1000.0 * m_gifFps) % m_gifLength;
+        if (frameIndex != m_currentGifFrameIndex) {
+            if (m_gifBlackWhite) {
+                m_gifAsciiDisplay->setPlainText(m_gifAsciiFrames[frameIndex]);
+            } else {
+                // Разбиваем на строки и соединяем с <br> для цветного режима
+                QStringList lines = m_gifAsciiFrames[frameIndex].split("\n");
+                m_gifAsciiDisplay->setHtml(lines.join("<br>"));
+            }
+            m_currentGifFrameIndex = frameIndex;
+        }
+    }
+    void stopGif() {
         m_gifPlayTimer->stop();
         m_btnPreprocGif->setEnabled(true);
         m_btnStopGif->setEnabled(false);
@@ -831,6 +838,7 @@ private:
     int m_currentFrameIndex;
     QTimer* m_playTimer;
     QMediaPlayer* m_player;
+    QAudioOutput* m_audioOutput;  // Новый указатель для аудиовыхода
 
     // --- Переменные для обработки GIF ---
     PreprocessingThread* m_gifPreprocThread;
