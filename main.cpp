@@ -31,6 +31,7 @@
 #include <QToolBar>
 #include <QSlider>
 #include <QLabel>
+#include <QCheckBox>
 
 // OpenCV headers
 #include <opencv2/opencv.hpp>
@@ -42,12 +43,14 @@
 class PreprocessingThread : public QThread {
     Q_OBJECT
 public:
-    PreprocessingThread(const QString &videoPath, int desiredWidth, const QString &asciiChars, QObject* parent = nullptr)
+    PreprocessingThread(const QString &videoPath, int desiredWidth, const QString &asciiChars, 
+                       bool blackWhite, QObject* parent = nullptr)
         : QThread(parent),
           m_videoPath(videoPath),
           m_desiredWidth(desiredWidth),
           m_asciiChars(asciiChars),
-          m_runFlag(true)
+          m_runFlag(true),
+          m_blackWhite(blackWhite)
     {}
 
     void stop() { m_runFlag = false; }
@@ -102,13 +105,18 @@ protected:
                     if (idx < 0) idx = 0;
                     if (idx >= asciiLen) idx = asciiLen - 1;
                     QChar ch = m_asciiChars.at(idx);
-                    rowStr += QString("<span style=\"color: rgb(%1,%2,%3)\">%4</span>")
-                              .arg(r).arg(g).arg(b).arg(ch);
+                    
+                    if (m_blackWhite) {
+                        rowStr += ch;
+                    } else {
+                        rowStr += QString("<span style=\"color: rgb(%1,%2,%3)\">%4</span>")
+                                 .arg(r).arg(g).arg(b).arg(ch);
+                    }
                 }
                 lines.append(rowStr);
             }
-            QString htmlFrame = lines.join("<br>");
-            asciiFrames.append(htmlFrame);
+            QString frameText = lines.join("\n");
+            asciiFrames.append(frameText);
 
             processedCount++;
             if (totalFrames > 0)
@@ -123,104 +131,104 @@ private:
     int m_desiredWidth;
     QString m_asciiChars;
     bool m_runFlag;
+    bool m_blackWhite;
 };
 
-//
-// Класс AsciiArtApp – главное окно приложения.
+// Класс AsciiArtApp – главное окно приложения
 class AsciiArtApp : public QMainWindow {
     Q_OBJECT
 public:
-		AsciiArtApp(QWidget* parent = nullptr)
-			: QMainWindow(parent),
-			m_preprocThread(nullptr),
-			m_videoFps(24.0),
-			m_videoLength(0),
-			m_videoStartTime(0),
-			m_currentFrameIndex(0),
-			m_gifPreprocThread(nullptr),
-			m_gifFps(24.0),
-			m_gifLength(0),
-			m_gifStartTime(0),
-			m_currentGifFrameIndex(0)
-	{
-		setWindowTitle("Генератор ASCII-арта");
-		resize(700, 700);
-		QApplication::setStyle(QStyleFactory::create("Fusion"));
+    AsciiArtApp(QWidget* parent = nullptr)
+        : QMainWindow(parent),
+          m_preprocThread(nullptr),
+          m_videoFps(24.0),
+          m_videoLength(0),
+          m_videoStartTime(0),
+          m_currentFrameIndex(0),
+          m_gifPreprocThread(nullptr),
+          m_gifFps(24.0),
+          m_gifLength(0),
+          m_gifStartTime(0),
+          m_currentGifFrameIndex(0),
+          m_imgBlackWhite(false),
+          m_videoBlackWhite(false),
+          m_gifBlackWhite(false)
+    {
+        setWindowTitle("Генератор ASCII-арта");
+        resize(700, 700);
+        QApplication::setStyle(QStyleFactory::create("Fusion"));
 
-		QPalette darkPalette;
-		darkPalette.setColor(QPalette::Window, QColor(53, 53, 53));
-		darkPalette.setColor(QPalette::WindowText, Qt::white);
-		darkPalette.setColor(QPalette::Base, QColor(15, 15, 15));
-		darkPalette.setColor(QPalette::AlternateBase, QColor(53, 53, 53));
-		darkPalette.setColor(QPalette::Text, Qt::white);
-		darkPalette.setColor(QPalette::Button, QColor(53, 53, 53));
-		darkPalette.setColor(QPalette::ButtonText, Qt::white);
-		QApplication::setPalette(darkPalette);
+        QPalette darkPalette;
+        darkPalette.setColor(QPalette::Window, QColor(53, 53, 53));
+        darkPalette.setColor(QPalette::WindowText, Qt::white);
+        darkPalette.setColor(QPalette::Base, QColor(15, 15, 15));
+        darkPalette.setColor(QPalette::AlternateBase, QColor(53, 53, 53));
+        darkPalette.setColor(QPalette::Text, Qt::white);
+        darkPalette.setColor(QPalette::Button, QColor(53, 53, 53));
+        darkPalette.setColor(QPalette::ButtonText, Qt::white);
+        QApplication::setPalette(darkPalette);
 
-		m_monospaceFont = QFont("Courier New", 10);
+        m_monospaceFont = QFont("Courier New", 10);
 
-		m_tabWidget = new QTabWidget(this);
-		setCentralWidget(m_tabWidget);
+        m_tabWidget = new QTabWidget(this);
+        setCentralWidget(m_tabWidget);
 
-		// Создаём вкладки
-		m_imageTab = new QWidget;
-		m_videoTab = new QWidget;
-		m_gifTab = new QWidget;
-		m_tabWidget->addTab(m_imageTab, "Изображение в ASCII");
-		m_tabWidget->addTab(m_videoTab, "Видео в ASCII");
-		m_tabWidget->addTab(m_gifTab, "GIF в ASCII");
+        m_imageTab = new QWidget;
+        m_videoTab = new QWidget;
+        m_gifTab = new QWidget;
+        m_tabWidget->addTab(m_imageTab, "Изображение в ASCII");
+        m_tabWidget->addTab(m_videoTab, "Видео в ASCII");
+        m_tabWidget->addTab(m_gifTab, "GIF в ASCII");
 
-		initImageTab();
-		initVideoTab();
-		initGifTab();
+        initImageTab();
+        initVideoTab();
+        initGifTab();
 
-		// Инициализация медиаплеера для аудио (видео)
-		m_player = new QMediaPlayer(this);
+        m_player = new QMediaPlayer(this);
 
-		m_playTimer = new QTimer(this);
-		m_playTimer->setInterval(15);
-		connect(m_playTimer, &QTimer::timeout, this, &AsciiArtApp::showNextFrame);
+        m_playTimer = new QTimer(this);
+        m_playTimer->setInterval(15);
+        connect(m_playTimer, &QTimer::timeout, this, &AsciiArtApp::showNextFrame);
 
-		m_gifPlayTimer = new QTimer(this);
-		m_gifPlayTimer->setInterval(15);
-		connect(m_gifPlayTimer, &QTimer::timeout, this, &AsciiArtApp::showNextGifFrame);
+        m_gifPlayTimer = new QTimer(this);
+        m_gifPlayTimer->setInterval(15);
+        connect(m_gifPlayTimer, &QTimer::timeout, this, &AsciiArtApp::showNextGifFrame);
 
-		QPushButton* closeBtn = new QPushButton("Закрыть");
-//		int tabHeight = m_tabWidget->tabBar()->sizeHint().height();
+        QPushButton* closeBtn = new QPushButton("Закрыть");
+        closeBtn->setStyleSheet(
+            "QPushButton { "
+            "   background-color: red; "
+            "   color: white; "
+            "}"
+        );
+        connect(closeBtn, &QPushButton::clicked, this, &AsciiArtApp::close);
+        m_tabWidget->setCornerWidget(closeBtn, Qt::TopRightCorner);
+    }
 
-		closeBtn->setStyleSheet(
-				"QPushButton { "
-				"   background-color: red; "
-				"   color: white; "
-				"}"
-				);
-		connect(closeBtn, &QPushButton::clicked, this, &AsciiArtApp::close);
-		m_tabWidget->setCornerWidget(closeBtn, Qt::TopRightCorner);
-	}
-		~AsciiArtApp() {
-			if (m_preprocThread) {
-				m_preprocThread->stop();
-				m_preprocThread->quit();
-				m_preprocThread->wait();
-				delete m_preprocThread;
-			}
-			if (m_gifPreprocThread) {
-				m_gifPreprocThread->stop();
-				m_gifPreprocThread->quit();
-				m_gifPreprocThread->wait();
-				delete m_gifPreprocThread;
-			}
-		}
+    ~AsciiArtApp() {
+        if (m_preprocThread) {
+            m_preprocThread->stop();
+            m_preprocThread->quit();
+            m_preprocThread->wait();
+            delete m_preprocThread;
+        }
+        if (m_gifPreprocThread) {
+            m_gifPreprocThread->stop();
+            m_gifPreprocThread->quit();
+            m_gifPreprocThread->wait();
+            delete m_gifPreprocThread;
+        }
+    }
 
 protected:
-		void closeEvent(QCloseEvent* event) override {
-			m_playTimer->stop();
-			m_gifPlayTimer->stop();
-			if (m_preprocThread) {
-				m_preprocThread->stop();
-				m_preprocThread->quit();
-				m_preprocThread->wait();
-			}
+    void closeEvent(QCloseEvent* event) override {
+        m_playTimer->stop();
+        m_gifPlayTimer->stop();
+        if (m_preprocThread) {
+            m_preprocThread->stop();
+            m_preprocThread->quit();
+            m_preprocThread->wait();
+        }
         if (m_gifPreprocThread) {
             m_gifPreprocThread->stop();
             m_gifPreprocThread->quit();
@@ -232,7 +240,6 @@ protected:
     }
 
 private slots:
-    // --- Слоты для работы с изображением ---
     void openImage() {
         QString fileName = QFileDialog::getOpenFileName(this, "Выберите изображение",
                                                         "", "Изображения (*.png *.jpg *.jpeg *.bmp *.gif)");
@@ -242,61 +249,69 @@ private slots:
         }
     }
 
-    void convertImageToAscii() {
-        if (m_currentImagePath.isEmpty()) {
-            QMessageBox::warning(this, "Ошибка", "Сначала выберите изображение.");
-            return;
-        }
-        cv::Mat img = cv::imread(m_currentImagePath.toStdString());
-        if (img.empty()) {
-            QMessageBox::warning(this, "Ошибка", "Не удалось открыть изображение.");
-            return;
-        }
-
-        int dw = m_imgSpinWidth->value();
-        QString asciiChars = m_imgCharsetEdit->text();
-        if (asciiChars.isEmpty()) {
-            QMessageBox::warning(this, "Ошибка", "Набор символов пуст.");
-            return;
-        }
-
-        int h_ = img.rows;
-        int w_ = img.cols;
-        double aspect = static_cast<double>(h_) / w_;
-        int newH = static_cast<int>(dw * aspect * 0.55);
-        if (newH < 1)
-            newH = 1;
-
-        cv::Mat resized;
-        cv::resize(img, resized, cv::Size(dw, newH));
-        QVector<QString> lines;
-        int length = asciiChars.length();
-        
-        m_progressImage->setValue(0);
-        for (int row = 0; row < newH; ++row) {
-            QString rowStr;
-            for (int col = 0; col < dw; ++col) {
-                cv::Vec3b pixel = resized.at<cv::Vec3b>(row, col);
-                int b = pixel[0];
-                int g = pixel[1];
-                int r = pixel[2];
-                double gray = 0.299 * r + 0.587 * g + 0.114 * b;
-                int idx = static_cast<int>(gray / 255 * (length - 1));
-                if (idx < 0) idx = 0;
-                if (idx >= length) idx = length - 1;
-                QChar ch = asciiChars.at(idx);
-                rowStr += QString("<span style=\"color: rgb(%1,%2,%3)\">%4</span>")
-                          .arg(r).arg(g).arg(b).arg(ch);
-            }
-            lines.append(rowStr);
-            int progress = static_cast<int>((row + 1) * 100.0 / newH);
-            m_progressImage->setValue(progress);
-            qApp->processEvents();
-        }
-        QString html = lines.join("<br>");
-        m_imgAsciiDisplay->setHtml(html);
-    }
-
+	void convertImageToAscii() {
+		if (m_currentImagePath.isEmpty()) {
+			QMessageBox::warning(this, "Ошибка", "Сначала выберите изображение.");
+			return;
+		}
+		cv::Mat img = cv::imread(m_currentImagePath.toStdString());
+		if (img.empty()) {
+			QMessageBox::warning(this, "Ошибка", "Не удалось открыть изображение.");
+			return;
+		}
+	
+		int dw = m_imgSpinWidth->value();
+		QString asciiChars = m_imgCharsetEdit->text();
+		if (asciiChars.isEmpty()) {
+			QMessageBox::warning(this, "Ошибка", "Набор символов пуст.");
+			return;
+		}
+	
+		int h_ = img.rows;
+		int w_ = img.cols;
+		double aspect = static_cast<double>(h_) / w_;
+		int newH = static_cast<int>(dw * aspect * 0.55);
+		if (newH < 1)
+			newH = 1;
+	
+		cv::Mat resized;
+		cv::resize(img, resized, cv::Size(dw, newH));
+		QVector<QString> lines;
+		int length = asciiChars.length();
+	
+		m_progressImage->setValue(0);
+		for (int row = 0; row < newH; ++row) {
+			QString rowStr;
+			for (int col = 0; col < dw; ++col) {
+				cv::Vec3b pixel = resized.at<cv::Vec3b>(row, col);
+				int b = pixel[0];
+				int g = pixel[1];
+				int r = pixel[2];
+				double gray = 0.299 * r + 0.587 * g + 0.114 * b;
+				int idx = static_cast<int>(gray / 255 * (length - 1));
+				if (idx < 0) idx = 0;
+				if (idx >= length) idx = length - 1;
+				QChar ch = asciiChars.at(idx);
+	
+				if (m_imgBlackWhite) {
+					rowStr += ch;
+				} else {
+					rowStr += QString("<span style=\"color: rgb(%1,%2,%3)\">%4</span>")
+						.arg(r).arg(g).arg(b).arg(ch);
+				}
+			}
+			lines.append(rowStr);
+			int progress = static_cast<int>((row + 1) * 100.0 / newH);
+			m_progressImage->setValue(progress);
+			qApp->processEvents();
+		}
+		QString result = lines.join("<br>");
+		if (m_imgBlackWhite) {
+			m_imgAsciiDisplay->setPlainText(lines.join("\n"));
+		} else {
+			m_imgAsciiDisplay->setHtml(result);
+		}
+	}
     void saveHtmlImage() {
         QString htmlCode = m_imgAsciiDisplay->toHtml();
         if (htmlCode.trimmed().isEmpty()) {
@@ -317,14 +332,12 @@ private slots:
         }
     }
 
-    // Слот для изменения зума на вкладке "Изображение"
     void onImgZoomChanged(int value) {
         QFont font = m_imgAsciiDisplay->font();
         font.setPointSize(value);
         m_imgAsciiDisplay->setFont(font);
     }
 
-    // --- Слоты для работы с видео ---
     void openVideo() {
         QString fileName = QFileDialog::getOpenFileName(this, "Выберите видео",
                                                         "", "Видео файлы (*.mp4 *.avi *.mov *.mkv *.wmv *.flv)");
@@ -351,7 +364,7 @@ private slots:
         m_btnStop->setEnabled(true);
         m_progressVideo->setValue(0);
 
-        m_preprocThread = new PreprocessingThread(m_currentVideoPath, w, chars, this);
+        m_preprocThread = new PreprocessingThread(m_currentVideoPath, w, chars, m_videoBlackWhite, this);
         connect(m_preprocThread, &PreprocessingThread::finished, this, &AsciiArtApp::onPreprocessingFinished);
         connect(m_preprocThread, &PreprocessingThread::progress, this, &AsciiArtApp::onPreprocessingProgress);
         m_preprocThread->start();
@@ -376,9 +389,9 @@ private slots:
             return;
         }
         m_progressVideo->setValue(100);
-        // Извлечение аудио опущено для краткости
         m_videoStartTime = QDateTime::currentMSecsSinceEpoch();
         m_currentFrameIndex = 0;
+        m_videoAsciiDisplay->clear();
         m_playTimer->start();
     }
 
@@ -391,20 +404,25 @@ private slots:
         }
     }
 
-    void showNextFrame() {
-        qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
-        qint64 elapsed = currentTime - m_videoStartTime;
-        int frameIndex = static_cast<int>(elapsed / 1000.0 * m_videoFps);
-        if (frameIndex >= m_videoLength) {
-            stopVideo();
-            return;
-        }
-        if (frameIndex != m_currentFrameIndex) {
-            m_videoAsciiDisplay->setHtml(m_asciiFrames[frameIndex]);
-            m_currentFrameIndex = frameIndex;
-        }
-    }
-
+	void showNextFrame() {
+		qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
+		qint64 elapsed = currentTime - m_videoStartTime;
+		int frameIndex = static_cast<int>(elapsed / 1000.0 * m_videoFps);
+		if (frameIndex >= m_videoLength) {
+			stopVideo();
+			return;
+		}
+		if (frameIndex != m_currentFrameIndex) {
+			if (m_videoBlackWhite) {
+				m_videoAsciiDisplay->setPlainText(m_asciiFrames[frameIndex]);
+			} else {
+				// Разбиваем на строки и соединяем с <br> для цветного режима
+				QStringList lines = m_asciiFrames[frameIndex].split("\n");
+				m_videoAsciiDisplay->setHtml(lines.join("<br>"));
+			}
+			m_currentFrameIndex = frameIndex;
+		}
+	}
     void stopVideo() {
         m_playTimer->stop();
         if (m_player)
@@ -420,14 +438,12 @@ private slots:
         }
     }
 
-    // Слот для изменения зума на вкладке "Видео"
     void onVideoZoomChanged(int value) {
         QFont font = m_videoAsciiDisplay->font();
         font.setPointSize(value);
         m_videoAsciiDisplay->setFont(font);
     }
 
-    // --- Слоты для работы с GIF ---
     void openGif() {
         QString fileName = QFileDialog::getOpenFileName(this, "Выберите GIF",
                                                         "", "GIF файлы (*.gif)");
@@ -454,7 +470,7 @@ private slots:
         m_btnStopGif->setEnabled(true);
         m_progressGif->setValue(0);
 
-        m_gifPreprocThread = new PreprocessingThread(m_currentGifPath, w, chars, this);
+        m_gifPreprocThread = new PreprocessingThread(m_currentGifPath, w, chars, m_gifBlackWhite, this);
         connect(m_gifPreprocThread, &PreprocessingThread::finished, this, &AsciiArtApp::onGifPreprocessingFinished);
         connect(m_gifPreprocThread, &PreprocessingThread::progress, this, &AsciiArtApp::onGifPreprocessingProgress);
         m_gifPreprocThread->start();
@@ -481,6 +497,7 @@ private slots:
         m_progressGif->setValue(100);
         m_gifStartTime = QDateTime::currentMSecsSinceEpoch();
         m_currentGifFrameIndex = 0;
+        m_gifAsciiDisplay->clear();
         m_gifPlayTimer->start();
     }
 
@@ -492,20 +509,24 @@ private slots:
             m_progressGif->setValue(0);
         }
     }
-
-    void showNextGifFrame() {
-        if (m_gifLength == 0)
-            return;
-        qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
-        qint64 elapsed = currentTime - m_gifStartTime;
-        int frameIndex = static_cast<int>(elapsed / 1000.0 * m_gifFps) % m_gifLength;
-        if (frameIndex != m_currentGifFrameIndex) {
-            m_gifAsciiDisplay->setHtml(m_gifAsciiFrames[frameIndex]);
-            m_currentGifFrameIndex = frameIndex;
-        }
-    }
-
-    void stopGif() {
+	void showNextGifFrame() {
+		if (m_gifLength == 0)
+			return;
+		qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
+		qint64 elapsed = currentTime - m_gifStartTime;
+		int frameIndex = static_cast<int>(elapsed / 1000.0 * m_gifFps) % m_gifLength;
+		if (frameIndex != m_currentGifFrameIndex) {
+			if (m_gifBlackWhite) {
+				m_gifAsciiDisplay->setPlainText(m_gifAsciiFrames[frameIndex]);
+			} else {
+				// Разбиваем на строки и соединяем с <br> для цветного режима
+				QStringList lines = m_gifAsciiFrames[frameIndex].split("\n");
+				m_gifAsciiDisplay->setHtml(lines.join("<br>"));
+			}
+			m_currentGifFrameIndex = frameIndex;
+		}
+	}
+	void stopGif() {
         m_gifPlayTimer->stop();
         m_btnPreprocGif->setEnabled(true);
         m_btnStopGif->setEnabled(false);
@@ -518,7 +539,6 @@ private slots:
         }
     }
 
-    // Слот для изменения зума на вкладке "GIF"
     void onGifZoomChanged(int value) {
         QFont font = m_gifAsciiDisplay->font();
         font.setPointSize(value);
@@ -526,82 +546,82 @@ private slots:
     }
 
 private:
-    // --- Инициализация вкладки "Изображение" ---
+    void initImageTab() {
+        QVBoxLayout* layout = new QVBoxLayout;
+        m_imageTab->setLayout(layout);
 
-	void initImageTab() {
-		QVBoxLayout* layout = new QVBoxLayout;
-		m_imageTab->setLayout(layout);
+        QHBoxLayout* topLayout = new QHBoxLayout;
+        m_btnOpenImg = new QPushButton("Открыть изображение");
+        connect(m_btnOpenImg, &QPushButton::clicked, this, &AsciiArtApp::openImage);
+        topLayout->addWidget(m_btnOpenImg);
 
-		QHBoxLayout* topLayout = new QHBoxLayout;
-		m_btnOpenImg = new QPushButton("Открыть изображение");
-		connect(m_btnOpenImg, &QPushButton::clicked, this, &AsciiArtApp::openImage);
-		topLayout->addWidget(m_btnOpenImg);
+        QGroupBox* widthGroup = new QGroupBox("Ширина");
+        QFormLayout* widthForm = new QFormLayout;
+        m_imgSpinWidth = new QSpinBox;
+        m_imgSpinWidth->setRange(10, 800);
+        m_imgSpinWidth->setValue(80);
+        widthForm->addRow("Символов:", m_imgSpinWidth);
+        widthGroup->setLayout(widthForm);
+        topLayout->addWidget(widthGroup);
 
-		QGroupBox* widthGroup = new QGroupBox("Ширина");
-		QFormLayout* widthForm = new QFormLayout;
-		m_imgSpinWidth = new QSpinBox;
-		m_imgSpinWidth->setRange(10, 800);
-		m_imgSpinWidth->setValue(80);
-		widthForm->addRow("Символов:", m_imgSpinWidth);
-		widthGroup->setLayout(widthForm);
-		topLayout->addWidget(widthGroup);
+        QGroupBox* charsetGroup = new QGroupBox("Набор символов");
+        QVBoxLayout* charsetLayout = new QVBoxLayout;
+        m_imgCharsetEdit = new QLineEdit(".,:;i1tfLCG08@");
+        charsetLayout->addWidget(m_imgCharsetEdit);
 
-		// Группа для набора символов и пресетов
-		QGroupBox* charsetGroup = new QGroupBox("Набор символов");
-		QVBoxLayout* charsetLayout = new QVBoxLayout;
-		m_imgCharsetEdit = new QLineEdit(".,:;i1tfLCG08@");
-		charsetLayout->addWidget(m_imgCharsetEdit);
+        m_imgPresetCombo = new QComboBox;
+        m_imgPresetCombo->addItem("Default:  .,:;i1tfLCG08@", ".,:;i1tfLCG08@");
+        m_imgPresetCombo->addItem("Preset 1:  .'`^\\\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$",
+                                 " .'`^\\\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$");
+        m_imgPresetCombo->addItem("Preset 2:  .:-=+*#%@", ".:-=+*#%@");
+        m_imgPresetCombo->addItem("Preset 3: @%#*+=-:. ", "@%#*+=-:. ");
+        charsetLayout->addWidget(m_imgPresetCombo);
+        connect(m_imgPresetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                [this](int index){
+                    QString preset = m_imgPresetCombo->itemData(index).toString();
+                    m_imgCharsetEdit->setText(preset);
+                });
+        charsetGroup->setLayout(charsetLayout);
+        topLayout->addWidget(charsetGroup);
 
-		m_imgPresetCombo = new QComboBox;
-		m_imgPresetCombo->addItem("Default:  .,:;i1tfLCG08@", ".,:;i1tfLCG08@");
-		m_imgPresetCombo->addItem("Preset 1:  .'`^\\\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$",
-				" .'`^\\\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$");
-		m_imgPresetCombo->addItem("Preset 2:  .:-=+*#%@", ".:-=+*#%@");
-		m_imgPresetCombo->addItem("Preset 3: @%#*+=-:. ", "@%#*+=-:. ");
-		charsetLayout->addWidget(m_imgPresetCombo);
-		connect(m_imgPresetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-				[this](int index){
-				QString preset = m_imgPresetCombo->itemData(index).toString();
-				m_imgCharsetEdit->setText(preset);
-				});
-		charsetGroup->setLayout(charsetLayout);
-		topLayout->addWidget(charsetGroup);
+        m_imgBwCheckBox = new QCheckBox("Черно-белый режим");
+        topLayout->addWidget(m_imgBwCheckBox);
+        connect(m_imgBwCheckBox, &QCheckBox::toggled, this, 
+                [this](bool checked) { m_imgBlackWhite = checked; });
 
-		m_btnConvertImg = new QPushButton("Конвертировать");
-		connect(m_btnConvertImg, &QPushButton::clicked, this, &AsciiArtApp::convertImageToAscii);
-		topLayout->addWidget(m_btnConvertImg);
+        m_btnConvertImg = new QPushButton("Конвертировать");
+        connect(m_btnConvertImg, &QPushButton::clicked, this, &AsciiArtApp::convertImageToAscii);
+        topLayout->addWidget(m_btnConvertImg);
 
-		layout->addLayout(topLayout);
+        layout->addLayout(topLayout);
 
-		// Элементы управления зумом для вкладки "Изображение"
-		QHBoxLayout* zoomLayout = new QHBoxLayout;
-		QLabel* zoomLabel = new QLabel("Масштаб:");
-		m_imgZoomSlider = new QSlider(Qt::Horizontal);
-		m_imgZoomSlider->setRange(5, 30); // диапазон размеров шрифта (в пунктах)
-		m_imgZoomSlider->setValue(m_monospaceFont.pointSize());
-		zoomLayout->addWidget(zoomLabel);
-		zoomLayout->addWidget(m_imgZoomSlider);
-		layout->addLayout(zoomLayout);
-		connect(m_imgZoomSlider, &QSlider::valueChanged, this, &AsciiArtApp::onImgZoomChanged);
+        QHBoxLayout* zoomLayout = new QHBoxLayout;
+        QLabel* zoomLabel = new QLabel("Масштаб:");
+        m_imgZoomSlider = new QSlider(Qt::Horizontal);
+        m_imgZoomSlider->setRange(5, 30);
+        m_imgZoomSlider->setValue(m_monospaceFont.pointSize());
+        zoomLayout->addWidget(zoomLabel);
+        zoomLayout->addWidget(m_imgZoomSlider);
+        layout->addLayout(zoomLayout);
+        connect(m_imgZoomSlider, &QSlider::valueChanged, this, &AsciiArtApp::onImgZoomChanged);
 
-		m_imgAsciiDisplay = new QTextEdit;
-		m_imgAsciiDisplay->setReadOnly(true);
-		m_imgAsciiDisplay->setFont(m_monospaceFont);
-		m_imgAsciiDisplay->setLineWrapMode(QTextEdit::NoWrap);
-		m_imgAsciiDisplay->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-		layout->addWidget(m_imgAsciiDisplay);
+        m_imgAsciiDisplay = new QTextEdit;
+        m_imgAsciiDisplay->setReadOnly(true);
+        m_imgAsciiDisplay->setFont(m_monospaceFont);
+        m_imgAsciiDisplay->setLineWrapMode(QTextEdit::NoWrap);
+        m_imgAsciiDisplay->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        layout->addWidget(m_imgAsciiDisplay);
 
-		m_progressImage = new QProgressBar;
-		m_progressImage->setValue(0);
-		m_progressImage->setFixedHeight(10);  // делаем его значительно тоньше
-		layout->addWidget(m_progressImage);
+        m_progressImage = new QProgressBar;
+        m_progressImage->setValue(0);
+        m_progressImage->setFixedHeight(10);
+        layout->addWidget(m_progressImage);
 
-		m_btnSaveImg = new QPushButton("Сохранить HTML");
-		connect(m_btnSaveImg, &QPushButton::clicked, this, &AsciiArtApp::saveHtmlImage);
-		layout->addWidget(m_btnSaveImg);
+        m_btnSaveImg = new QPushButton("Сохранить HTML");
+        connect(m_btnSaveImg, &QPushButton::clicked, this, &AsciiArtApp::saveHtmlImage);
+        layout->addWidget(m_btnSaveImg);
+    }
 
-	}
-    // --- Инициализация вкладки "Видео" ---
     void initVideoTab() {
         QVBoxLayout* layout = new QVBoxLayout;
         m_videoTab->setLayout(layout);
@@ -620,7 +640,6 @@ private:
         videoWidthGroup->setLayout(videoWidthForm);
         controlsLayout->addWidget(videoWidthGroup);
 
-        // Группа для набора символов и пресетов для видео
         QGroupBox* videoCharsetGroup = new QGroupBox("Набор символов");
         QVBoxLayout* videoCharsetLayout = new QVBoxLayout;
         m_videoCharsetEdit = new QLineEdit("@%#*+=-:. ");
@@ -641,6 +660,11 @@ private:
         videoCharsetGroup->setLayout(videoCharsetLayout);
         controlsLayout->addWidget(videoCharsetGroup);
 
+        m_videoBwCheckBox = new QCheckBox("Черно-белый режим");
+        controlsLayout->addWidget(m_videoBwCheckBox);
+        connect(m_videoBwCheckBox, &QCheckBox::toggled, this, 
+                [this](bool checked) { m_videoBlackWhite = checked; });
+
         m_btnPreprocPlay = new QPushButton("Воспроизвести");
         connect(m_btnPreprocPlay, &QPushButton::clicked, this, &AsciiArtApp::startPreprocessing);
         controlsLayout->addWidget(m_btnPreprocPlay);
@@ -656,7 +680,6 @@ private:
         m_progressVideo->setValue(0);
         layout->addWidget(m_progressVideo);
 
-        // Элементы управления зумом для вкладки "Видео"
         QHBoxLayout* videoZoomLayout = new QHBoxLayout;
         QLabel* videoZoomLabel = new QLabel("Масштаб:");
         m_videoZoomSlider = new QSlider(Qt::Horizontal);
@@ -675,7 +698,6 @@ private:
         layout->addWidget(m_videoAsciiDisplay);
     }
 
-    // --- Инициализация вкладки "GIF" ---
     void initGifTab() {
         QVBoxLayout* layout = new QVBoxLayout;
         m_gifTab->setLayout(layout);
@@ -694,7 +716,6 @@ private:
         gifWidthGroup->setLayout(gifWidthForm);
         controlsLayout->addWidget(gifWidthGroup);
 
-        // Группа для набора символов и пресетов для GIF
         QGroupBox* gifCharsetGroup = new QGroupBox("Набор символов");
         QVBoxLayout* gifCharsetLayout = new QVBoxLayout;
         m_gifCharsetEdit = new QLineEdit("@%#*+=-:. ");
@@ -715,6 +736,11 @@ private:
         gifCharsetGroup->setLayout(gifCharsetLayout);
         controlsLayout->addWidget(gifCharsetGroup);
 
+        m_gifBwCheckBox = new QCheckBox("Черно-белый режим");
+        controlsLayout->addWidget(m_gifBwCheckBox);
+        connect(m_gifBwCheckBox, &QCheckBox::toggled, this, 
+                [this](bool checked) { m_gifBlackWhite = checked; });
+
         m_btnPreprocGif = new QPushButton("Конвертировать");
         connect(m_btnPreprocGif, &QPushButton::clicked, this, &AsciiArtApp::startPreprocessingGif);
         controlsLayout->addWidget(m_btnPreprocGif);
@@ -730,7 +756,6 @@ private:
         m_progressGif->setValue(0);
         layout->addWidget(m_progressGif);
 
-        // Элементы управления зумом для вкладки "GIF"
         QHBoxLayout* gifZoomLayout = new QHBoxLayout;
         QLabel* gifZoomLabel = new QLabel("Масштаб:");
         m_gifZoomSlider = new QSlider(Qt::Horizontal);
@@ -760,7 +785,9 @@ private:
     QPushButton* m_btnSaveImg;
     QString m_currentImagePath;
     QProgressBar* m_progressImage;
-    QSlider* m_imgZoomSlider; // Слайдер для зума изображения
+    QSlider* m_imgZoomSlider;
+    QCheckBox* m_imgBwCheckBox;
+    bool m_imgBlackWhite;
 
     // --- Виджеты для вкладки "Видео" ---
     QWidget* m_videoTab;
@@ -773,7 +800,9 @@ private:
     QProgressBar* m_progressVideo;
     QTextEdit* m_videoAsciiDisplay;
     QString m_currentVideoPath;
-    QSlider* m_videoZoomSlider; // Слайдер для зума видео
+    QSlider* m_videoZoomSlider;
+    QCheckBox* m_videoBwCheckBox;
+    bool m_videoBlackWhite;
 
     // --- Виджеты для вкладки "GIF" ---
     QWidget* m_gifTab;
@@ -786,7 +815,9 @@ private:
     QProgressBar* m_progressGif;
     QTextEdit* m_gifAsciiDisplay;
     QString m_currentGifPath;
-    QSlider* m_gifZoomSlider; // Слайдер для зума GIF
+    QSlider* m_gifZoomSlider;
+    QCheckBox* m_gifBwCheckBox;
+    bool m_gifBlackWhite;
 
     QTabWidget* m_tabWidget;
     QFont m_monospaceFont;
